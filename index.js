@@ -88,6 +88,54 @@ app.get("/expensesByCategory", async (req, res) => {
   }
 });
 
+app.put("/editRecord/:id", async (req, res) => {
+  const { id } = req.params;
+  const { date, description, category, amount } = req.body;
+
+  try {
+    const client = await pool.connect();
+    const result = await client.query(
+      `UPDATE expenses
+       SET date = $1, description = $2, category = $3, amount = $4
+       WHERE id = $5`,
+      [date, description, category, amount, id]
+    );
+    client.release();
+
+    if (result.rowCount > 0) {
+      res.json({ status: "Entry updated successfully" });
+    } else {
+      res.status(404).json({ error: "Entry not found" });
+    }
+  } catch (err) {
+    console.error("Error updating expense:", err.message);
+    res.status(500).json({ error: "Failed to update entry" });
+  }
+});
+
+app.delete("/deleteRecord/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const client = await pool.connect();
+    const result = await client.query(
+      `DELETE FROM expenses
+       WHERE id = $1`,
+      [id]
+    );
+    client.release();
+
+    if (result.rowCount > 0) {
+      res.json({ status: "Entry deleted successfully" });
+    } else {
+      res.status(404).json({ error: "Entry not found" });
+    }
+  } catch (err) {
+    console.log(err);
+    console.error("Error deleting expense:", err.message);
+    res.status(500).json({ error: "Failed to delete entry" });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Listening to http://localhost:${PORT}`);
 });
