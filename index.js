@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 4242;
 app.get("/", async (req, res) => {
   try {
     const client = await pool.connect();
-    const result = await client.query("SELECT * FROM expenses");
+    const result = await client.query("SELECT * FROM expenses ORDER BY date DESC");
     client.release();
     const data = result.rows;
     res.json(data);
