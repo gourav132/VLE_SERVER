@@ -136,6 +136,50 @@ app.delete("/deleteRecord/:id", async (req, res) => {
   }
 });
 
+app.get("/retrieve", async (req, res) => {
+  const { category, startDate, endDate } = req.query;
+
+  try {
+    const client = await pool.connect();
+
+    let query = `SELECT * FROM expenses`;
+    let conditions = [];
+    let values = [];
+
+    // Check if category filter is provided
+    if (category) {
+      conditions.push(`category = $${values.length + 1}`);
+      values.push(category);
+    }
+
+    // Check if startDate and endDate are provided
+    if (startDate) {
+      conditions.push(`date >= $${values.length + 1}`);
+      values.push(startDate);
+    }
+
+    if (endDate) {
+      conditions.push(`date <= $${values.length + 1}`);
+      values.push(endDate);
+    }
+
+    // Add WHERE clause if any conditions exist
+    if (conditions.length > 0) {
+      query += ` WHERE ` + conditions.join(" AND ");
+    }
+
+    const result = await client.query(query, values);
+    client.release();
+
+    // Send the response with the expenses
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch expenses" });
+  }
+});
+
+
 app.listen(PORT, () => {
   console.log(`Listening to http://localhost:${PORT}`);
 });
