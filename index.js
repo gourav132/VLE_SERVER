@@ -40,7 +40,7 @@ app.post("/register", async (req, res) => {
 
     // Insert the new user into the users table
     await client.query(
-      `INSERT INTO users (user_id, fname, lname, email, password) VALUES ($1, $2, $3, $4)`,
+      `INSERT INTO users (user_id, fname, lname, email, password) VALUES ($1, $2, $3, $4, $5)`,
       [userId, fname, lname, email, hashedPassword]
     );
 
