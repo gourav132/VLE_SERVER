@@ -5,13 +5,47 @@ const cors = require("cors");
 
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const cookieParser = require("cookie-parser");
 
 const app = express();
 app.use(express.json());
 app.use(cors());
+app.use(cookieParser());
 
 const PORT = process.env.PORT || 4242;
 const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret";
+
+
+// Middleware to authenticate requests using JWT token from cookies
+const authenticate = async (req, res, next) => {
+  const token = req.cookies.jwt; // Extract JWT token from the "jwt" cookie
+
+  if (!token) {
+    return res.status(401).json({ error: "Unauthorized: No token provided" });
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET); // Verify the token
+
+    const client = await pool.connect();
+
+    // Verify userId from the token exists in the database
+    const userCheck = await client.query("SELECT * FROM users WHERE user_id = $1", [decoded.userId]);
+
+    if (userCheck.rows.length === 0) {
+      client.release();
+      return res.status(401).json({ error: "Unauthorized: Invalid user ID" });
+    }
+
+    req.user = decoded; // Attach decoded user information to the request object
+    client.release();
+    next(); // Proceed to the next middleware or route handler
+  } catch (err) {
+    console.error("JWT verification or user validation error:", err.message);
+    res.status(401).json({ error: "Unauthorized: Invalid token or user" });
+  }
+};
+
 
 // Helper function to generate a 6-digit unique user ID
 const generateUserId = () => {
@@ -44,8 +78,13 @@ app.post("/register", async (req, res) => {
       [userId, fname, lname, email, hashedPassword]
     );
 
+    // Generate a JWT token
+    const token = jwt.sign({ userId: userId, email: email }, JWT_SECRET, {
+      expiresIn: "1h",
+    });
+
     client.release();
-    res.status(201).json({ message: "User registered successfully" });
+    res.status(201).json({ message: "User registered successfully", token });
   } catch (err) {
     console.error("Error registering user:", err.message);
     res.status(500).json({ error: "Failed to register user" });
@@ -88,10 +127,12 @@ app.post("/login", async (req, res) => {
   }
 });
 
-app.get("/", async (req, res) => {
+app.get("/", authenticate, async (req, res) => {
+
+  const userId = req.user.userId;
   try {
     const client = await pool.connect();
-    const result = await client.query("SELECT * FROM expenses ORDER BY date DESC");
+    const result = await client.query("SELECT * FROM expenses WHERE user_id = $1 ORDER BY date DESC", [userId]);
     client.release();
     const data = result.rows;
     res.json(data);
@@ -100,13 +141,14 @@ app.get("/", async (req, res) => {
   }
 });
 
-app.post("/recordExpense", async (req, res) => {
+app.post("/recordExpense", authenticate, async (req, res) => {
+  const userId = req.user.userId;
   const { date, description, category, amount } = req.body;
   try {
     const client = await pool.connect();
     await client.query(
-      `INSERT INTO expenses (date, description, category, amount) VALUES ($1, $2, $3, $4)`,
-      [date, description, category, amount]
+      `INSERT INTO expenses (user_id, date, description, category, amount) VALUES ($1, $2, $3, $4, $5)`,
+      [userId, date, description, category, amount]
     );
     client.release();
     res.json({
@@ -118,7 +160,8 @@ app.post("/recordExpense", async (req, res) => {
   }
 });
 
-app.get("/categoryExpense", async (req, res) => {
+app.get("/categoryExpense", authenticate, async (req, res) => {
+  const userId = req.user.userId;
   try {
     const client = await pool.connect();
 
@@ -130,9 +173,9 @@ app.get("/categoryExpense", async (req, res) => {
     const result = await client.query(
       `SELECT category, SUM(amount::numeric) as total_amount
        FROM expenses
-       WHERE EXTRACT(MONTH FROM date) = $1 AND EXTRACT(YEAR FROM date) = $2
+       WHERE EXTRACT(MONTH FROM date) = $1 AND EXTRACT(YEAR FROM date) = $2 AND user_id = $3
        GROUP BY category`,
-      [currentMonth, currentYear]
+      [currentMonth, currentYear, userId]
     );
 
     client.release();
@@ -145,29 +188,7 @@ app.get("/categoryExpense", async (req, res) => {
   }
 });
 
-app.get("/expensesByCategory", async (req, res) => {
-  const { category } = req.query;
-
-  try {
-    const client = await pool.connect();
-
-    // Query to fetch all expenses for the given category
-    const result = await client.query(
-      `SELECT * FROM expenses WHERE category = $1`,
-      [category]
-    );
-
-    client.release();
-
-    // Send the response with the expenses
-    res.json(result.rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to fetch expenses by category" });
-  }
-});
-
-app.put("/editRecord/:id", async (req, res) => {
+app.put("/editRecord/:id", authenticate, async (req, res) => {
   const { id } = req.params;
   const { date, description, category, amount } = req.body;
 
@@ -192,14 +213,15 @@ app.put("/editRecord/:id", async (req, res) => {
   }
 });
 
-app.delete("/deleteRecord/:id", async (req, res) => {
+app.delete("/deleteRecord/:id", authenticate, async (req, res) => {
   const { id } = req.params;
+  const userId = req.user.userId;
   try {
     const client = await pool.connect();
     const result = await client.query(
       `DELETE FROM expenses
-       WHERE id = $1`,
-      [id]
+        WHERE id = $1 AND user_id = $2`,
+      [id, userId]
     );
     client.release();
 
@@ -215,15 +237,16 @@ app.delete("/deleteRecord/:id", async (req, res) => {
   }
 });
 
-app.get("/retrieve", async (req, res) => {
+app.get("/retrieve", authenticate, async (req, res) => {
   const { category, startDate, endDate } = req.query;
+  const userId = req.user.userId;
 
   try {
     const client = await pool.connect();
 
-    let query = `SELECT * FROM expenses`;
+    let query = `SELECT * FROM expenses WHERE user_id = $1`;
     let conditions = [];
-    let values = [];
+    let values = [userId];
 
     // Check if category filter is provided
     if (category) {
