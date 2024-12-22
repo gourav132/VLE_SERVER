@@ -14,7 +14,7 @@ app.use(cookieParser());
 
 const PORT = process.env.PORT || 4242;
 const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret";
-
+const tokenAge = 3 * 24 * 60 * 60;
 
 // Middleware to authenticate requests using JWT token from cookies
 const authenticate = async (req, res, next) => {
@@ -80,11 +80,16 @@ app.post("/register", async (req, res) => {
 
     // Generate a JWT token
     const token = jwt.sign({ userId: userId, email: email }, JWT_SECRET, {
-      expiresIn: "1h",
+      expiresIn: tokenAge,
     });
 
     client.release();
-    res.status(201).json({ message: "User registered successfully", token });
+    res.cookie("jwt", token, {
+      withCredential: true,
+      httpOnly: false,
+      maxAge: tokenAge * 1000,
+    });
+    res.status(201).json({ message: "User registered successfully", user: user, status: true });
   } catch (err) {
     console.error("Error registering user:", err.message);
     res.status(500).json({ error: "Failed to register user" });
@@ -114,13 +119,20 @@ app.post("/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
+
     // Generate a JWT token
     const token = jwt.sign({ userId: user.user_id, email: user.email }, JWT_SECRET, {
-      expiresIn: "1h",
+      expiresIn: tokenAge,
     });
 
     client.release();
-    res.json({ message: "Login successful", token });
+    res.cookie("jwt", token, {
+      withCredential: true,
+      httpOnly: false,
+      maxAge: tokenAge * 1000,
+    });
+    res.status(200).json({user: user, status: true});
+    // res.json({ message: "Login successful", token });
   } catch (err) {
     console.error("Error logging in user:", err.message);
     res.status(500).json({ error: "Failed to log in" });
