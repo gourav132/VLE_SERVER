@@ -9,7 +9,11 @@ const cookieParser = require("cookie-parser");
 
 const app = express();
 app.use(express.json());
-app.use(cors());
+app.use(cors({
+  origin: ["http://localhost:3000", "https://expense-tracker-fawn-ten.vercel.app"],
+  method: ["GET", "POST", "PUT", "DELETE"],
+  credentials: true
+}));
 app.use(cookieParser());
 
 const PORT = process.env.PORT || 4242;
