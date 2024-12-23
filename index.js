@@ -22,7 +22,9 @@ const tokenAge = 3 * 24 * 60 * 60;
 
 // Middleware to authenticate requests using JWT token from cookies
 const authenticate = async (req, res, next) => {
-  const token = req.cookies.jwt; // Extract JWT token from the "jwt" cookie
+  // const token = req.cookies.jwt; // Extract JWT token from the "jwt" cookie
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(" ")[1];
 
   if (!token) {
     return res.status(401).json({ error: "Unauthorized: No token provided" });
