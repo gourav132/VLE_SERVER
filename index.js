@@ -23,8 +23,11 @@ const tokenAge = 3 * 24 * 60 * 60;
 // Middleware to authenticate requests using JWT token from cookies
 const authenticate = async (req, res, next) => {
   // const token = req.cookies.jwt; // Extract JWT token from the "jwt" cookie
+  // console.log("request -> ", req.cookies);
   const authHeader = req.headers.authorization;
   const token = authHeader && authHeader.split(" ")[1];
+
+  // console.warn("authenticate header",authHeader);
 
   if (!token) {
     return res.status(401).json({ error: "Unauthorized: No token provided" });
@@ -93,6 +96,7 @@ app.post("/register", async (req, res) => {
     res.cookie("jwt", token, {
       withCredential: true,
       httpOnly: false,
+      sameSite: "Lax",
       maxAge: tokenAge * 1000,
     });
     res.status(201).json({ message: "User registered successfully", user: user, status: true });
@@ -135,6 +139,7 @@ app.post("/login", async (req, res) => {
     res.cookie("jwt", token, {
       withCredential: true,
       httpOnly: false,
+      sameSite: "Lax",
       maxAge: tokenAge * 1000,
     });
     res.status(200).json({user: user, status: true});
