@@ -13,6 +13,41 @@ const generateUserId = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
+// Route to check authentication
+router.post("/checkAuth", async (req, res) => {
+  const { token } = req.body;
+
+  if (!token) {
+    return res.status(400).json({ error: "Token is required" });
+  }
+
+  try {
+    // Verify the token
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    const client = await pool.connect();
+
+    // Retrieve the user from the database using the user_id from the token
+    const userResult = await client.query(
+      "SELECT user_id, fname, lname, email FROM users WHERE user_id = $1",
+      [decoded.userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      client.release();
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const user = userResult.rows[0];
+    client.release();
+
+    res.status(200).json({ user });
+  } catch (err) {
+    console.error("Error validating token:", err.message);
+    res.status(401).json({ error: "Invalid token" });
+  }
+});
+
 // Route for registering a new user
 router.post("/register", async (req, res) => {
   const { fname, lname, email, password } = req.body;
@@ -30,10 +65,7 @@ router.post("/register", async (req, res) => {
       return res.status(400).json({ error: "User already exists" });
     }
 
-    // Hash the password
     const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Generate a unique user ID
     const userId = generateUserId();
 
     // Insert the new user into the users table
@@ -48,15 +80,13 @@ router.post("/register", async (req, res) => {
     });
 
     client.release();
-    res.cookie("jwt", token, {
-      withCredential: true,
-      httpOnly: false,
-      sameSite: "Lax",
-      maxAge: tokenAge * 1000,
+    res.status(201).json({
+      userId: userId,
+      fname: fname,
+      lname: lname,
+      email: email,
+      token: token,
     });
-    res
-      .status(201)
-      .json({ message: "User registered successfully", status: true });
   } catch (err) {
     console.error("Error registering user:", err.message);
     res.status(500).json({ error: "Failed to register user" });
@@ -99,9 +129,13 @@ router.post("/login", async (req, res) => {
     );
 
     client.release();
-    res
-      .status(200)
-      .json({ fname: user.fname, lname: user.lname, token: token });
+    res.status(200).json({
+      userId: user.user_id,
+      fname: user.fname,
+      lname: user.lname,
+      email: user.email,
+      token: token,
+    });
   } catch (err) {
     console.error("Error logging in user:", err.message);
     res.status(500).json({ error: "Failed to log in" });

@@ -165,7 +165,7 @@ app.get("/retrieve", authenticate, async (req, res) => {
 
     // Add WHERE clause if any conditions exist
     if (conditions.length > 0) {
-      query += ` WHERE ` + conditions.join(" AND ");
+      query += ` AND ` + conditions.join(" AND ");
     }
 
     const result = await client.query(query, values);
